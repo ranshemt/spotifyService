@@ -16,11 +16,24 @@ var UID = 'n76jbzpr8p28jfixqadct9k01'
 //
 //new AT (Authorization Token)
 var newAT = async function(req, res, next){
+    //let RT = 'AQCWjkPW0DYU08s5zAU6piJPo5U0pqZpSK54l0vZus7um2z4TrvN51gd0GwzLf4k4ttQ5QjFDc7xmWw6HIijRNak5uYjNq_i9gGcV6Yrqac4OFccARZ4u6Ts88-5IkrASG8xaQ'
     console.log('starting newAT()')
+    //
     //get RT from DB
-    let RT = 'AQCWjkPW0DYU08s5zAU6piJPo5U0pqZpSK54l0vZus7um2z4TrvN51gd0GwzLf4k4ttQ5QjFDc7xmWw6HIijRNak5uYjNq_i9gGcV6Yrqac4OFccARZ4u6Ts88-5IkrASG8xaQ'
-    //options required in the POST call
+    let currUID = UID, currUser = null
+    var RT = 'invalid_RT for user: ' + currUID
+    var lookFor = {
+        'id' : currUID
+    }
+    await User.findOne(lookFor, (err, curr_User) => {
+        currUser = curr_User
+        RT = curr_User.RT
+        console.log(`found userID: ${curr_User.id} with RT: ${RT}`)
+    })    
+    //
+    //call to Spotify API: POST /api/token
     let authOptions = {
+        method: 'POST',
         url: 'https://accounts.spotify.com/api/token',
         form: {
             grant_type: 'refresh_token',
@@ -34,22 +47,22 @@ var newAT = async function(req, res, next){
     //
     var access_token    = "some0_invalid_access_token_AT_invalid"
     //make the call
-    request.post(authOptions, async function(error, response, body) {
-        if(!error && response.statusCode === 200){
-            //console.log(`body.access_token = ${body.access_token}`)
+    //
+    rp(authOptions)
+        .then(async (body) => {
             access_token    = body.access_token
-        } else{
-            console.log(`response.statusCode = ${response.statusCode}`)
-            console.log(`error in newAT(): ${error}`)
-        }
-        //console.log new AT
-        console.log(`new AT: ${access_token}`)
-        //save new AT in DB
-        await User.updateOne(
-            {'id': UID},
-            {$set: {AT: access_token}})
-        res.json(body)
-    })
+            //console.log new AT
+            console.log(`new AT: ${access_token}`)
+            //save new AT in DB
+            await User.updateOne(
+                {'id': UID},
+                {$set: {AT: access_token}})
+            res.json(body)
+        })
+        .catch((err) => {
+            console.log(`response.statusCode = ${err.statusCode}`)
+            console.log(`error in newAT(): ${err}`)
+        })
 }
 //
 //get basic data
@@ -94,7 +107,7 @@ var basicData = async function(req, res, next){
                     url: baseURL + '/newAT',
                     json: true
                 }
-                //call to our route GET /newAT
+                //call to our route GET: /newAT
                 rp(opt)
                     .then(async (body2) => {
                         //update options
