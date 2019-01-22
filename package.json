@@ -1,0 +1,31 @@
+{
+  "name": "spotifyservice",
+  "version": "1.0.0",
+  "description": "Spotify service by Ran & Hodaya",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ranshemt/spotifyService.git"
+  },
+  "author": "RanST, Hodaya",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ranshemt/spotifyService/issues"
+  },
+  "homepage": "https://github.com/ranshemt/spotifyService#readme",
+  "dependencies": {
+    "@material-ui/core": "^3.9.0",
+    "cookie-parser": "^1.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.16.4",
+    "mongoose": "^5.4.5",
+    "morgan": "^1.9.1",
+    "querystring": "^0.2.0",
+    "react": "^16.7.0",
+    "request": "^2.88.0",
+    "request-promise": "^4.2.2"
+  }
+}
