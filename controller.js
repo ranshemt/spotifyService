@@ -10,160 +10,250 @@ const asyncWrapper  = require ('./async.wrapper')
 //GLOBAL variables
 const baseURL       = 'http://localhost:3000'
 var UID = 'n76jbzpr8p28jfixqadct9k01'
+/**
+ *  @ gets user id
+ *  @ query mongoose to find 'AT'
+ *  @ returns Promise with the key resulted from mongoose query
+ */
+async function getAT(uid){
+    return new Promise(async (resolve, reject) => {
+        let f_name = 'getAT()', call1 = 'call1', call2= 'call2'
+        //
+        //getting user from DB
+        console.log(`starting ${f_name}`)
+        console.log(`   in ${f_name}> received partially id: ${uid.substr(0, 5)}`)
+        var lookFor = {
+            id : uid
+        }
+        User.find(lookFor).exec()
+            .then((res) => {
+                resolve(res[0].AT)
+            })
+            .catch(() => {
+                reject(null)
+            })
+    })
+}
+/**
+ *  @ gets user id
+ *  @ query mongoose to find 'RT'
+ *  @ returns Promise with the key resulted from mongoose query
+ */
+async function getRT(uid){
+    return new Promise(async (resolve, reject) => {
+        let f_name = 'getRT(uid)', call1 = 'call1', call2= 'call2'
+        //
+        //getting user from DB
+        console.log(`starting ${f_name}`)
+        console.log(`   in ${f_name}> received partially id: ${uid.substr(0, 5)}`)
+        var lookFor = {
+            idd : uid
+        }
+        User.find(lookFor).exec()
+            .then((res) => {
+                resolve(res[0].RT)
+            })
+            .catch(() => {
+                reject(null)
+            })
+    })
+}
+/**
+ *  @ gets user id
+ *  @ returns new Promise:
+ *  @ success   :   {status, message, realResponse}
+ *  @ failure   :   {status, message, realResponse, ..moreReleventKeys}
+ */
+async function get_new_AT(uid){
+    return new Promise(async (resolve, reject) => {
+        let f_name = 'get_new_AT()', call1 = 'getRT()', call2= 'Spotify_API: POST /api/token'
+        console.log(`starting ${f_name}`)
+        console.log(`   in ${f_name}> received partially id: ${uid.substr(0, 5)}`)
+        //get RT from DB        
+        var RT = 'invalid_RT for user: ' + uid
+        getRT(uid)
+            .then((rt_res) => {
+                RT = rt_find
+                console.log(`   in ${f_name}> found partially userID: ${rt_find.substr(0, 5)} with partially RT: ${RT.substr(0, 10)}`)
+                //
+                //get new access token from Spotify API
+                let options = {
+                    method: 'POST',
+                    uri: 'https://accounts.spotify.com/api/token',
+                    form: {
+                        grant_type: 'refresh_token',
+                        refresh_token: RT
+                    },
+                    headers: {
+                        'Authorization' : 'Basic ' + (new Buffer.from(myAppConsts.client_id + ':' + myAppConsts.client_secret).toString('base64'))
+                    },
+                    json: true
+                };
+                //
+                var access_token    = "some0_invalid_access_token_AT_invalid"
+                rp(options)
+                    .then(async (body) => {
+                        access_token    = body.access_token
+                        console.log(`   in ${f_name}> new partially AT= ${access_token.substr(0, 10)}`)
+                        //save new AT in DB
+                        User.updateOne({id: uid}, {$set: {AT: access_token}}).exec()
+                            .then((res) => {
+                                //console.log(`   in ${f_name}> res = ${JSON.stringify(res)}}`)
+                                resolve({
+                                    statusCode: 200,
+                                    message: `[${f_name} SUCCESS with message --success-- from: updateOne()]`,
+                                    realResponse: body,
+                                    access_token: body.access_token
+                                })
+                            })
+                            .catch((err) => {
+                                //console.log(`   in ${f_name}> err with updateOne() = ${err}`)
+                                reject({
+                                    statusCode: 404,
+                                    message: `[${f_name} FAILED with message: --not found-- from: updateOne()]`,
+                                    realResponse: {r: '[no realResponse]'}
+                                })
+                            })
+                    })
+                    .catch((err) => {
+                        console.log(`   in ${f_name}> catch = ?}`)
+                        let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
+                        let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+                        reject({
+                            statusCode: sc,
+                            message: `[${f_name} FAILED with message: --${ms}-- from: ${call2}]`,
+                            realResponse: err
+                        })
+                    })
+            })
+            .catch(() => {
+                reject({
+                    statusCode: 404,
+                    message: `[${f_name} FAILED with message: --not found-- from: ${call1}]`,
+                    realResponse: {r: '[no realResponse]'}
+                })
+            })
+    })//new Promise
+}
 //
 //
-//METHODS
+//ROUTES implementations
 //
 //new AT (Authorization Token)
+/**
+ *  @ gets user id
+ *  @ returns new Promise:
+ *  @ success   :   {status, message, realResponse}
+ *  @ failure   :   {status, message, realResponse, ..moreReleventKeys}
+ */
 var newAT = async function(req, res, next){
-    //let RT = 'AQCWjkPW0DYU08s5zAU6piJPo5U0pqZpSK54l0vZus7um2z4TrvN51gd0GwzLf4k4ttQ5QjFDc7xmWw6HIijRNak5uYjNq_i9gGcV6Yrqac4OFccARZ4u6Ts88-5IkrASG8xaQ'
-    console.log('starting newAT()')
-    //
-    //get RT from DB
+    let f_name = '/GET newAT', call1 = 'get_new_AT()', call2= 'call2'
+    console.log(`starting ${f_name}`)
     const {id = null} = req.params
-    console.log("received id: " + id)
-    var RT = 'invalid_RT for user: ' + id
-    let lookFor = {
-        id: id
-    }
-    const r_find = await User.find(lookFor)
-    //console.log("r_find: " + JSON.stringify(r_find))
-    if(r_find){
-        RT = r_find[0].RT
-        console.log(`found userID: ${r_find[0].id} with RT: ${RT}`)
-    }
-    else{
-        res.status(404).json({
-            status: 404,
-            message: 'not found'
+    console.log(`   in${f_name}> received partially id: ${id.substr(0, 5)}`)
+    //
+    //get new AT using our function
+    get_new_AT(id)
+        .then((mSuccess) => {
+            console.log(`   in ${f_name}> partially new_AT is: ${mSuccess.access_token.substr(0, 10)}`)
+            res.json({
+                statusCode: mSuccess.statusCode,
+                message: `[${f_name} SUCCESS with message --${mSuccess.message}-- from: ${call1}]`,
+                realResponse: mSuccess
+            })
         })
-    }
-    //
-    //call to Spotify API: POST /api/token
-    let options = {
-        method: 'POST',
-        uri: 'https://accounts.spotify.com/api/token',
-        form: {
-            grant_type: 'refresh_token',
-            refresh_token: RT
-        },
-        headers: {
-            'content-type': 'application/x-www-form-urlencoded',
-            'Authorization' : 'Basic ' + (new Buffer(myAppConsts.client_id + ':' + myAppConsts.client_secret).toString('base64'))
-        },
-        json: true
-    };
-    //
-    var access_token    = "some0_invalid_access_token_AT_invalid"
-    //make the call
-    //
-    rp(options)
-        .then(async (body) => {
-            access_token    = body.access_token
-            console.log(`new AT: ${access_token}`)
-            //save new AT in DB
-            const r_updateOne = await User.updateOne(
-                {'id': id},
-                {$set: {AT: access_token}})
-            if(r_updateOne){
-                res.json(body)
-            }
-            else {
-                res.status(404).send('not found')
-            }
-        })
-        .catch((err) => {
-            console.log(`response.statusCode = ${err.statusCode}`)
-            console.log(`error in newAT(): ${err}`)
-            res.status(err.statusCode).json({
-                status: err.statusCode,
-                message: err.message
+        .catch((mError) => {
+            res.json({
+                statusCode: mError.statusCode,
+                message: `[${f_name} FAILED with message: --${mError.message}-- from: ${call1}]`,
+                realResponse: mError
             })
         })
 }
 //
-//get basic data
+//get basic data from Spotify API
 var basicData = async function(req, res, next){
-    console.log("starting basicData()")
-    //
-    //getting user from DB
+    let f_name = '/GET basicData', call1 = 'getAT()', call2= 'Spotify_API GET /me'
+    console.log(`starting ${f_name}`)
     const {id = null} = req.params
-    console.log("received id: " + id)
+    console.log(`   in${f_name}> received partially id: ${id.substr(0, 5)}`)
+    //
+    //get AT from DB using our funciton
     var AT = 'invalid_AT for user: ' + id
-    var lookFor = {
-        id : id
-    }
-    let r_find = await User.find(lookFor)
-    if(r_find){
-        AT = r_find.AT
-        //console.log(`found userID: ${curr_User.id} with AT: ${AT}`)
+    const at_find = await getAT(id)
+    if(at_find){
+        AT = at_find[0].AT
+        console.log(`   in ${f_name}> found partially userID: ${at_find[0].id.substr(0, 5)} with partially AT: ${AT.substr(0, 10)}`)
     }
     else{
-        res.status(404).json({
-            status: 404,
-            message: 'not found'
+        res.json({
+            statusCode: 404,
+            message: `[${f_name} FAILED with message: --not found-- from: ${call1}]`,
+            realResponse: {r: '[no realResponse]'}
         })
     }
     //
+    //create Spotify API call
     var options = {
         url: 'https://api.spotify.com/v1/me',
         headers: { 'Authorization': 'Bearer ' + AT },
         json: true
     };
-    //call to Spotify API: GET /me
     rp(options)
         .then((body) => {
-            console.log("no error doing: " + options.url)
-            res.json(body)
+            res.json({
+                statusCode: 200,
+                message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                realResponse: body
+            })
         })
-        .catch((err) => {
-            //Forbidden to access
-            if(err.statusCode === 403){
-                console.log(`error in ${options.url} call with status: ${err.statusCode}`)
-                console.log(`error in ${options.url} call with message: ${err.message}`)
-                res.json(err)
-            }
+        .catch(async (err) => {
+            let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
             //need new AT
-            if(err.statusCode == 401){
-                console.log('AT invalid in GET /basicData')
-                let opt_url = baseURL + '/newAT/' + id
-                let opt = {
-                    url: opt_url,
-                    json: true
-                }
-                //call to our route GET: /newAT
-                rp(opt)
-                    .then(async (body2) => {
-                        //update options
-                        currUser = null
-                        await User.findOne(lookFor, (err, curr_User) => {
-                            currUser = curr_User
-                            AT = curr_User.AT
-                            console.log("User AT: " + AT)
-                        })
-                        //options.qs.access_token = AT
-                        options.headers = { 'Authorization': 'Bearer ' + AT }
-                        //
-                        //call to Spotify API: GET /me
+            if(sc == 401){
+                console.log(`   in ${f_name}> AT is invalid from call: ${call2}`)
+                console.log(`   in ${f_name}> will attempt to get new AT for partially user: ${id.substr(0, 5)}`)
+                //get new AT using our function
+                get_new_AT(id)
+                    .then((mSuccess) => {   //new AT created successfully    
+                        console.log(`   in ${f_name}> partially new_AT from get_new_AT() is: ${mSuccess.access_token.substr(0, 10)}`)
+                        //call again
+                        options.headers = { 'Authorization': 'Bearer ' + mSuccess.access_token }
                         rp(options)
-                            .then((body3) => {
-                                console.log('completed GET /basicData after creatingnew AT')
-                                res.json(body3)
+                            .then((body2) => {
+                                res.json({
+                                    statusCode: 200,
+                                    message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                                    realResponse: body2
+                                })
                             })
-                            .catch((err3) => {
-                                console.log('error in rp(options) second call with: ' + options.url)        
-                                if(err3.statusCode === 401){
-                                    console.log('creating new AT in GET /basicData FAILED! code=401')
-                                    res.json(err3)
-                                }
-                            })
+                            .catch((err2) => {
+                                let sc2 = err.hasOwnProperty('statusCode') ? err2.statusCode : 999
+                                let ms2 = err.hasOwnProperty('message'   ) ? err2.message    : 'err: no message property'
+                                res.json({
+                                    statusCode: sc2,
+                                    message: `[${f_name} FAILED with message: --${ms}-- from: ${call2}]`,
+                                    realResponse: err2
+                                })
+                            })//second call to API
                     })
-                    .catch((err2) => {
-                        console.log('error in rp(opt) with: ' + opt.url)
-                        res.json(err2)
+                    .catch((mError) => {    //new AT wasn't created
+                        res.json({
+                            statusCode: mError.statusCode,
+                            message: `[${f_name} FAILED with message --${mError.message}-- from: get_new_AT()]`,
+                            realResponse: mError
+                        })
                     })
             }
-        })
+            else{
+                let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+                res.json({
+                    statusCode: sc,
+                    message: `[${f_name} FAILED with message --${ms}-- from: ${call2}]`,
+                    realResponse: err
+                })
+            }
+        })//first call to API
 }
 //
 //welcome message
