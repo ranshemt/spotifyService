@@ -15,10 +15,11 @@ app.use(express.urlencoded({extended: true}))
 //Routes
 app.get('/basicData/:id', asyncWrapper(ctrl.basicData))
 app.get('/newAT/:id', asyncWrapper(ctrl.newAT))
+app.get('/invalidAT/:id', asyncWrapper(ctrl.invalidAT))
 app.get('/welcomeMsg/:id', asyncWrapper(ctrl.welcomeMsg))
 app.get('/getPlaylists/:id', asyncWrapper(ctrl.getPlaylists))
 app.get('/getTracks/:id&:pl_id', asyncWrapper(ctrl.getTracks))
-app.get('/getArtists/:id', asyncWrapper(ctrl.getArtists))
+app.get('/getTopArtists/:id', asyncWrapper(ctrl.getTopArtists))
 app.get('/artistTopTracks/:id&:art_id', asyncWrapper(ctrl.artistTopTracks))
 
 app.post('/newPL/:id', asyncWrapper(ctrl.newPL))

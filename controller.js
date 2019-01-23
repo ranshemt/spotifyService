@@ -9,10 +9,12 @@ const asyncWrapper  = require ('./async.wrapper')
 //
 //GLOBAL variables
 const baseURL       = 'http://localhost:3000'
-/**
+/** function
  *  @ gets user id
  *  @ query mongoose to find 'AT'
- *  @ returns Promise with the key resulted from mongoose query
+ *  @ returns new Promise:
+ *  @ resolve   :   {access_token (string)}
+ *  @ reject    :   {'property doesnt exist'} OR {err}
  */
 async function getAT(uid){
     return new Promise(async (resolve, reject) => {
@@ -26,17 +28,24 @@ async function getAT(uid){
         }
         User.find(lookFor).exec()
             .then((res) => {
-                resolve(res[0].AT)
+                let r_relevant_JSON = JSON.parse(JSON.stringify(res[0]))
+                if(r_relevant_JSON.hasOwnProperty('AT')){
+                    resolve(r_relevant_JSON.AT)
+                } else{
+                    reject('the property you tried to reach doesnt exist')   
+                }
             })
             .catch((err) => {
                 reject(err)
             })
     })
 }
-/**
+/** function
  *  @ gets user id
  *  @ query mongoose to find 'RT'
- *  @ returns Promise with the key resulted from mongoose query
+ *  @ returns new Promise:
+ *  @ resolve   :   {refresh_token (string)}
+ *  @ reject    :   {'property doesnt exist'} OR {err}
  */
 async function getRT(uid){
     return new Promise(async (resolve, reject) => {
@@ -50,18 +59,23 @@ async function getRT(uid){
         }
         User.find(lookFor).exec()
             .then((res) => {
-                resolve(res[0].RT)
+                let r_relevant_JSON = JSON.parse(JSON.stringify(res[0]))
+                if(r_relevant_JSON.hasOwnProperty('RT')){
+                    resolve(r_relevant_JSON.RT)
+                } else{
+                    reject('the property you tried to reach doesnt exist')   
+                }
             })
             .catch((err) => {
                 reject(err)
             })
     })
 }
-/**
+/** function
  *  @ gets user id
  *  @ returns new Promise:
- *  @ success   :   {status, message, realResponse}
- *  @ failure   :   {status, message, realResponse, ..moreReleventKeys}
+ *  @ resolve   :   {status, message, realResponse, access_token}
+ *  @ reject    :   {status, message, realResponse}
  */
 async function get_new_AT(uid){
     return new Promise(async (resolve, reject) => {
@@ -101,8 +115,8 @@ async function get_new_AT(uid){
                                 resolve({
                                     statusCode: 200,
                                     message: `[${f_name} SUCCESS with message --success-- from: updateOne()]`,
-                                    realResponse: body,
-                                    access_token: body.access_token
+                                    access_token: body.access_token,
+                                    realResponse: body
                                 })
                             })
                             .catch((err) => {
@@ -134,16 +148,79 @@ async function get_new_AT(uid){
             })
     })//new Promise
 }
+/** function
+ *  @ gets user id
+ *  @ query mongoose to update 'AT'
+ *  @ returns new Promise
+ */
+async function make_invalidAT(uid){
+    var f_name = 'make_invalidAT()'
+    return new Promise(async (resolve, reject) => {
+        var newAT = "invalid_AT_for_user__" + uid.substr(0, 5)
+        //save new AT in DB
+        User.updateOne({id: uid}, {$set: {AT: newAT}}).exec()
+        .then((res) => {
+            //console.log(`   in ${f_name}> res = ${JSON.stringify(res)}}`)
+            resolve({
+                statusCode: 200,
+                message: `[${f_name} SUCCESS with message --success-- from: updateOne()]`,
+                access_token: newAT,
+                realResponse: res
+            })
+        })
+        .catch((err) => {
+            //console.log(`   in ${f_name}> err with updateOne() = ${err}`)
+            reject({
+                statusCode: 404,
+                message: `[${f_name} FAILED with message: --${err}-- from: updateOne()]`,
+                realResponse: err
+            })
+        })
+    })
+}
 //
 //
 //ROUTES implementations
 //
-//new AT (Authorization Token)
-/**
- *  @ gets user id
- *  @ returns new Promise:
+//
+//
+/** GET /invalidAT/id
+ *  @ gets user id from querystring
+ *  @ returns res.json():
  *  @ success   :   {status, message, realResponse}
- *  @ failure   :   {status, message, realResponse, ..moreReleventKeys}
+ *  @ failure   :   {status, message, realResponse}
+ */
+var invalidAT = async function(req, res, next){
+    let f_name = 'GET newAT/id', call1 = 'make_invalidAT()', call2= 'call2'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
+    console.log(`   in${f_name}> received partially id: ${id.substr(0, 5)}`)
+    //
+    //get new AT using our function
+    make_invalidAT(id)
+        .then((resolve_make_invalidAT) => {
+            console.log(`   in ${f_name}> new_AT is: ${resolve_make_invalidAT.access_token}`)
+            res.json({
+                statusCode: resolve_make_invalidAT.statusCode,
+                message: `[${f_name} SUCCESS with message --${resolve_make_invalidAT.message}-- from: ${call1}]`,
+                access_token: resolve_make_invalidAT.access_token,
+                realResponse: resolve_make_invalidAT
+            })
+        })
+        .catch((reject_make_invalidAT) => {
+            res.json({
+                statusCode: reject_make_invalidAT.statusCode,
+                message: `[${f_name} FAILED with message: --${reject_make_invalidAT.message}-- from: ${call1}]`,
+                realResponse: reject_make_invalidAT
+            })
+        })
+}
+//
+/** GET /newAT/id
+ *  @ gets user id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, realResponse}
+ *  @ failure   :   {status, message, realResponse}
  */
 var newAT = async function(req, res, next){
     let f_name = '/GET newAT', call1 = 'get_new_AT()', call2= 'call2'
@@ -170,9 +247,51 @@ var newAT = async function(req, res, next){
         })
 }
 //
-//get basic data from Spotify API
+/** function
+ *  @ gets user AT
+ *  @ Spotify call GET /me. to get logged in user data 
+ *  @ returns new Promise:
+ *  @ resolve   :   {status, message, realResponse}
+ *  @ reject    :   {status, message, realResponse}
+ */
+async function s_api_me(myAT){
+    var f_name ='s_api_me()', call1 = 'Spotify_API GET /me', call2 = 'call2'
+    console.log(`starting ${f_name}`)
+    console.log(`   in ${f_name}> received partially AT: ${myAT.substr(0, 10)}`)
+    return new Promise(async (resolve, reject) =>{
+        var options = {
+            url: 'https://api.spotify.com/v1/me',
+            headers: { 'Authorization': 'Bearer ' + myAT },
+            json: true
+        }
+        rp(options)
+            .then((body) => {
+                resolve({
+                    statusCode: 200,
+                    message: `[${f_name} SUCCESS with message --success-- from: ${call1}]`,
+                    realResponse: body
+                })
+            })
+            .catch((err) => {
+                let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
+                let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+                reject({
+                    statusCode: sc,
+                    message: `[${f_name} FAILED with message: --${ms}-- from: ${call1}]`,
+                    realResponse: err
+                })
+            })
+    })//new Promise
+}
+//
+/** GET /basicData/id
+ *  @ gets user id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, realResponse}
+ *  @ failure   :   {status, message, realResponse}
+ */
 var basicData = async function(req, res, next){
-    let f_name = '/GET basicData', call1 = 'getAT()', call2= 'Spotify_API GET /me'
+    let f_name = '/GET basicData', call1 = 'getAT()', call2= 's_api_me()', call3 = 'get_new_AT()'
     console.log(`starting ${f_name}`)
     const {id = null} = req.params
     console.log(`   in ${f_name}> received partially id: ${id.substr(0, 5)}`)
@@ -180,21 +299,165 @@ var basicData = async function(req, res, next){
     //get AT from DB using our funciton
     var AT = 'invalid_AT for user: ' + id
     getAT(id)
-        .then((at_find) => {
-            AT = at_find
+        .then((resolve_getAT) => {
+            AT = resolve_getAT
             console.log(`   in ${f_name}> found partially userID: ${id.substr(0, 5)} with partially AT: ${AT.substr(0, 10)}`)
             //
-            //create Spotify API call
+            //make call
+            s_api_me(AT)
+                .then((resolve_s_api_me) => {
+                    res.json({
+                        statusCode: 200,
+                        message: `[${f_name} SUCCESS with message --${resolve_s_api_me.message}-- from: ${call2}]`,
+                        realResponse: resolve_s_api_me.realResponse
+                    })
+                })
+                .catch((reject_s_api_me) => {
+                    //need new AT
+                    if(reject_s_api_me.statusCode == 401){
+                        console.log(`   in ${f_name}> AT is invalid from call: ${call2}`)
+                        console.log(`   in ${f_name}> will attempt to get new AT for partially user: ${id.substr(0, 5)}`)
+                        //get new AT using our function
+                        get_new_AT(id)
+                            .then((resolve_get_new_AT) => {
+                                console.log(`   in ${f_name}> partially new_AT from get_new_AT() is: ${resolve_get_new_AT.access_token.substr(0, 10)}`)
+                                AT = resolve_get_new_AT.access_token
+                                s_api_me(AT)
+                                    .then((resolve_s_api_me2) => {
+                                        res.json({
+                                            statusCode: 200,
+                                            message: `[${f_name} SUCCESS with message --${resolve_s_api_me2.message}-- from_2_: ${call2}]`,
+                                            realResponse: resolve_s_api_me2.realResponse
+                                        })
+                                    })
+                                    .catch((reject_s_api_me2) => {
+                                        res.json({
+                                            statusCode: reject_s_api_me2.statusCode,
+                                            message: `[${f_name} FAILED with message: --${reject_s_api_me2.message}-- from_2_: ${call2}]`,
+                                            realResponse: reject_s_api_me2.realResponse
+                                        })
+                                    })
+                            })
+                            .catch((reject_get_new_AT) => {
+                                res.json({
+                                    statusCode: reject_get_new_AT.statusCode,
+                                    message: `[${f_name} FAILED with message --${reject_get_new_AT.message}-- from: ${call3}]`,
+                                    realResponse: reject_get_new_AT.realResponse
+                                })
+                            })
+                    }
+                    //api call failed
+                    else{
+                        res.json({
+                            statusCode: reject_s_api_me.statusCode,
+                            message: `[${f_name} FAILED with message: --${reject_s_api_me.message}-- from: ${call2}]`,
+                            realResponse: reject_s_api_me.realResponse
+                        })
+                    }
+                })
+        })
+        //error getting AT using our function
+        .catch((reject_getAT) => {
+            res.json({
+                statusCode: 404,
+                message: `[${f_name} FAILED with message: --${reject_getAT}-- from: ${call1}]`,
+                realResponse: reject_getAT
+            })
+        })
+}
+//
+/** GET /welcomeMsg/id
+ *  @ gets user id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
+var welcomeMsg = async function(req, res, next){
+    let f_name = '/GET welcomeMsg', call1 = 'find()', call2= 'call2'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
+    //
+    //getting user from DB
+    let lookFor = {
+        'id' : id
+    }
+    let r = {
+        un: 'error name',
+        img: '#'
+    } 
+    User.find(lookFor).exec()
+        .then((r_find) => {
+            let r_relevant_JSON = JSON.parse(JSON.stringify(r_find[0]))
+            r.un  = r_relevant_JSON.hasOwnProperty('name') ? r_relevant_JSON.name : 'no name for user'
+            r.img = r_relevant_JSON.hasOwnProperty('img' ) ? r_relevant_JSON.img  : '#'
+            res.json({
+                statusCode: 200,
+                message: `[${f_name} SUCCESS with message: --success-- from: ${call1}]`,
+                actualResponse: {is: true, data: r},
+                realResponse: r_find
+            })
+        })
+        .catch((err) => {
+            let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
+            let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+            res.json({
+                statusCode: sc,
+                message: `[${f_name} FAILED with message: --${ms}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: err
+            })
+        })
+}
+//
+/** GET /getPlaylists/id
+ *  @ gets user id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
+var getPlaylists = async function(req, res, next){
+    let f_name = '/GET getPlaylists', call1 = 'getAT()', call2= 'Spotify_API GET /users/{user_id}/playlists'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
+    //
+    //get AT from DB using our funciton
+    var AT = 'invalid_AT for user: ' + id
+    getAT(id)
+        .then((at_find) => {
+            AT = at_find
+            //
+            let url_api = 'https://api.spotify.com/v1/users/' + id + '/playlists'
             var options = {
-                url: 'https://api.spotify.com/v1/me',
+                url: url_api,
                 headers: { 'Authorization': 'Bearer ' + AT },
                 json: true
             };
+            //call to Spotify API: GET /users/{user_id}/playlists
             rp(options)
                 .then((body) => {
+                    let r = {
+                        playlists: []
+                    }
+                    let items_response = body.items
+                    items_response.forEach((currItem) => {
+                        let curr_id   = currItem.hasOwnProperty('id'  ) ? currItem.id   : 'no id for playlist'
+                        let curr_name = currItem.hasOwnProperty('name') ? currItem.name : 'no name for playlist'
+                        let curr_img  = '#'
+                        if(currItem.hasOwnProperty('images') && currItem.images.length > 0)
+                            curr_img = currItem.images[0].url
+                        //add to r object
+                        r.playlists.push({
+                            id: curr_id,
+                            name: curr_name,
+                            img: curr_img
+                        })
+                    })
                     res.json({
                         statusCode: 200,
                         message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                        actualResponse: {is: true, data: r},
                         realResponse: body
                     })
                 })
@@ -212,9 +475,27 @@ var basicData = async function(req, res, next){
                                 options.headers = { 'Authorization': 'Bearer ' + mSuccess.access_token }
                                 rp(options)
                                     .then((body2) => {
+                                        let r = {
+                                            playlists: []
+                                        }
+                                        let items_response = body2.items
+                                        items_response.forEach((currItem) => {
+                                            let curr_id   = currItem.hasOwnProperty('id'  ) ? currItem.id   : 'no id for playlist'
+                                            let curr_name = currItem.hasOwnProperty('name') ? currItem.name : 'no name for playlist'
+                                            let curr_img  = '#'
+                                            if(currItem.hasOwnProperty('images') && currItem.images.length > 0)
+                                                curr_img = currItem.images[0].url
+                                            //add to r object
+                                            r.playlists.push({
+                                                id: curr_id,
+                                                name: curr_name,
+                                                img: curr_img
+                                            })
+                                        })
                                         res.json({
                                             statusCode: 200,
                                             message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                                            actualResponse: {is: true, data: r},
                                             realResponse: body2
                                         })
                                     })
@@ -223,7 +504,8 @@ var basicData = async function(req, res, next){
                                         let ms2 = err.hasOwnProperty('message'   ) ? err2.message    : 'err: no message property'
                                         res.json({
                                             statusCode: sc2,
-                                            message: `[${f_name} FAILED with message: --${ms}-- from: ${call2}]`,
+                                            message: `[${f_name} FAILED with message: --${ms2}-- from_2_: ${call2}]`,
+                                            actualResponse: {is: false},
                                             realResponse: err2
                                         })
                                     })//second call to API
@@ -232,6 +514,7 @@ var basicData = async function(req, res, next){
                                 res.json({
                                     statusCode: mError.statusCode,
                                     message: `[${f_name} FAILED with message --${mError.message}-- from: get_new_AT()]`,
+                                    actualResponse: {is: false},
                                     realResponse: mError
                                 })
                             })
@@ -241,6 +524,7 @@ var basicData = async function(req, res, next){
                         res.json({
                             statusCode: sc,
                             message: `[${f_name} FAILED with message --${ms}-- from: ${call2}]`,
+                            actualResponse: {is: false},
                             realResponse: err
                         })
                     }
@@ -250,629 +534,663 @@ var basicData = async function(req, res, next){
             res.json({
                 statusCode: 404,
                 message: `[${f_name} FAILED with message: --${err_getAT}-- from: ${call1}]`,
-                realResponse: {r: '[no realResponse]'}
+                actualResponse: {is: false},
+                realResponse: err_getAT
             })
         })
-
 }
 //
-//welcome message
-var welcomeMsg = async function(req, res, next){
-    const {id = null} = req.params
-    //
-    //getting user from DB
-    let currUser = null
-    let lookFor = {
-        'id' : id
-    }
-    await User.findOne(lookFor, (err, curr_User) => {
-        currUser = curr_User
-    })
-    let r = {
-        un: currUser.name,
-        img: currUser.img
-    } 
-    res.json(r)
-}
-//
-//
-var getPlaylists = async function(req, res, next){
-    console.log("getPlaylists()")    
-    const {id = null} = req.params
-    var lookFor = {
-        'id' : id
-    }
-    //getting user from DB
-    let currUser = null
-    var AT = 'invalid_AT for user: ' + id
-    await User.findOne(lookFor, (err, curr_User) => {
-        currUser = curr_User
-        AT = curr_User.AT
-        //console.log(`found userID: ${curr_User.id} with AT: ${AT}`)
-    })
-    //
-    let url_api = 'https://api.spotify.com/v1/users/' + id + '/playlists'
-    var options = {
-        url: url_api,
-        headers: { 'Authorization': 'Bearer ' + AT },
-        json: true
-    };
-    //call to Spotify API: GET /users/{user_id}/playlists
-    rp(options)
-        .then((body) => {
-            let r = {
-                playlists: []
-            }
-            let items_response = body.items
-            items_response.forEach((currItem) => {
-                //add to r object
-                r.playlists.push({
-                    id: currItem.id,
-                    name: currItem.name,
-                    img: currItem.images[0].url
-                })
-            }) 
-            res.json(r)
-            //res.json(body)
-        })
-        .catch((err) => {
-            //Forbidden to access
-            if(err.statusCode === 403){
-                console.log(`error in ${options.url} call with status: ${err.statusCode}`)
-                console.log(`error in ${options.url} call with message: ${err.message}`)
-                res.json(err)
-            }
-            //need new AT
-            if(err.statusCode == 401){
-                console.log('AT invalid in GET /getPlaylists')
-
-                let opt = {
-                    url: baseURL + '/newAT',
-                    json: true
-                }
-                //call to our route GET /newAT
-                rp(opt)
-                    .then(async (body2) => {
-                        //update options
-                        currUser = null
-                        await User.findOne(lookFor, (err, curr_User) => {
-                            currUser = curr_User
-                            AT = curr_User.AT
-                        })
-                        options.headers = { 'Authorization': 'Bearer ' + AT }
-                        //
-                        //call to Spotify API: GET /users/{user_id}/playlists
-                        rp(options)
-                            .then((body3) => {
-                                console.log('completed GET /getPlaylists after creating new AT')
-                                items_response = body3.items
-                                items_response.forEach((currItem) => {
-                                    //add to r object
-                                    r.playlists.push({
-                                        id: currItem.id,
-                                        name: currItem.name,
-                                        img: currItem.images[0].url
-                                    })
-                                }) 
-                                res.json(r)
-                                //res.json(body3)
-                            })
-                            .catch((err3) => {
-                                console.log('error in rp(options) second call with: ' + options.url)        
-                                if(err3.statusCode === 401){
-                                    console.log('creating new AT in GET /getPlaylists FAILED! code=401')
-                                    res.json(err3)
-                                }
-                            })
-                    })
-                    .catch((err2) => {
-                        console.log('error in rp(opt) with: ' + opt.url)
-                        res.json(err2)
-                    })
-            }
-        })
-}
-//
-//get tracks
+/** GET /getTracks/id&pl_is
+ *  @ gets user_id & pl_id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
 var getTracks = async function(req, res, next){
-    console.log("getTracks()")
+    let f_name = '/GET getTracks', call1 = 'getAT()', call2= 'Spotify_API GET /playlists/{pl_id}/tracks'
+    console.log(`starting ${f_name}`)
     const {id = null} = req.params
     const {pl_id = null} = req.params
-    var lookFor = {
-        'id' : id
-    }
-    //getting user from DB
-    let currUser = null
-    var AT = 'invalid_AT for user: ' + id
-    await User.findOne(lookFor, (err, curr_User) => {
-        currUser = curr_User
-        AT = curr_User.AT
-        //console.log(`found userID: ${curr_User.id} with AT: ${AT}`)
-    })
     //
-    //creating API call
-    let url_api = 'https://api.spotify.com/v1/playlists/' + pl_id + '/tracks'
-    var options = {
-        url: url_api,
-        headers: { 'Authorization': 'Bearer ' + AT },
-        json: true
-    };
-    //call to Spotify API: GET /playlists/{user_id}/playlists
-    rp(options)
-        .then((body) => {
-            let r = {
-                tracks: []
-            }
-            let tracks_response = body.items
-            tracks_response.forEach((currItem) => {
-                let artists = ''
-                let artists_response = currItem.track.artists
-                //console.log('artists_response = ' + JSON.stringify(artists_response))
-                artists_response.forEach((currArtist) => {
-                    artists += currArtist.name + ', '
-                })
-                artists = artists.slice(0, artists.length-1-1)
-                //add to r object
-                r.tracks.push({
-                    id: currItem.track.id,
-                    name: currItem.track.name,
-                    artist: artists
-                })
-            }) 
-            res.json(r)
-            //res.json(body)
-        })
-        .catch((err) => {
-            //Forbidden to access
-            if(err.statusCode === 403){
-                console.log(`error in ${options.url} call with status: ${err.statusCode}`)
-                console.log(`error in ${options.url} call with message: ${err.message}`)
-                res.json(err)
-            }
-            //need new AT
-            if(err.statusCode == 401){
-                console.log('AT invalid in GET /getPlaylists')
-
-                let opt = {
-                    url: baseURL + '/newAT',
-                    json: true
+    //get AT from DB using our funciton
+    var AT = 'invalid_AT for user: ' + id
+    getAT(id)
+        .then((at_find) => {
+        AT = at_find
+        //
+        let url_api = 'https://api.spotify.com/v1/playlists/' + pl_id + '/tracks'
+        var options = {
+            url: url_api,
+            headers: { 'Authorization': 'Bearer ' + AT },
+            json: true
+        }
+        //call to Spotify API: GET /playlists/{pl_id}/tracks
+        rp(options)
+            .then((body) => {
+                let r = {
+                    tracks: []
                 }
-                //call to our route GET /newAT
-                rp(opt)
-                    .then(async (body2) => {
-                        //update options
-                        currUser = null
-                        await User.findOne(lookFor, (err, curr_User) => {
-                            currUser = curr_User
-                            AT = curr_User.AT
+                let tracks_response = body.items
+                tracks_response.forEach((currTrack) => {
+                    let flagMsg = null
+                    if((currTrack.hasOwnProperty('track')) == false)
+                        flagMsg = 'no property track'
+                    if(currTrack.hasOwnProperty('track') == true && (currTrack.track.hasOwnProperty('artists') == false))
+                        flagMas = 'no property artists'
+                    if(currTrack.hasOwnProperty('track') == true && currTrack.track.hasOwnProperty('artists') == true && currTrack.track.artists.length < 1)
+                        flagMsg = 'no tracks in playlist'
+                    if(flagMsg != null){
+                        res.json({
+                            statusCode: 404,
+                            message: `[${f_name} FAILED with message --${flagMsg}-- from: ${call2}]`,
+                            actualResponse: {is: false},
+                            realResponse: body
                         })
-                        options.headers = { 'Authorization': 'Bearer ' + AT }
-                        //
-                        //call to Spotify API: GET /users/{user_id}/playlists
-                        rp(options)
-                            .then((body3) => {
-                                console.log('completed GET /getPlaylists after creating new AT')
-                                items_response = body3.items
-                                items_response.forEach((currItem) => {
-                                    //add to r object
-                                    r.playlists.push({
-                                        id: currItem.id,
-                                        name: currItem.name,
-                                        img: currItem.images[0].url
-                                    })
-                                }) 
-                                res.json(r)
-                                //res.json(body3)
-                            })
-                            .catch((err3) => {
-                                console.log('error in rp(options) second call with: ' + options.url)        
-                                if(err3.statusCode === 401){
-                                    console.log('creating new AT in GET /getPlaylists FAILED! code=401')
-                                    res.json(err3)
-                                }
-                            })
+                    }
+                    let artists_response = currTrack.track.artists
+                    let artists = ''
+                    artists_response.forEach((currArtist) => {
+                        artists += currArtist.name + ', '
                     })
-                    .catch((err2) => {
-                        console.log('error in rp(opt) with: ' + opt.url)
-                        res.json(err2)
+                    artists = artists.slice(0, artists.length-1-1)
+                    let track_id   = currTrack.track.hasOwnProperty('id'  ) ? currTrack.track.id   : 'no id for track'
+                    let track_name = currTrack.track.hasOwnProperty('name') ? currTrack.track.name : 'no name for playlist'
+                    //add to r object
+                    r.tracks.push({
+                        id: track_id,
+                        name: track_name,
+                        artist: artists
                     })
-            }
-        })
-}
-//
-//get tracks
-var getArtists = async function(req, res, next){
-    console.log("getArtists()")
-    const {id = null} = req.params
-    var lookFor = {
-        'id' : id
-    }
-    //getting user from DB
-    let currUser = null
-    var AT = 'invalid_AT for user: ' + id
-    await User.findOne(lookFor, (err, curr_User) => {
-        currUser = curr_User
-        AT = curr_User.AT
-        //console.log(`found userID: ${curr_User.id} with AT: ${AT}`)
-    })
-    //
-    //creating API call
-    var options = {
-        url: 'https://api.spotify.com/v1/me/top/artists?time_range=short_term&limit=5',
-        headers: { 'Authorization': 'Bearer ' + AT },
-        json: true
-    };
-    //call to Spotify API: GET /users/{user_id}/playlists
-    rp(options)
-        .then((body) => {
-            let r = {
-                artists: []
-            }
-            let artists_response = body.items
-            artists_response.forEach((currArtist) => {
-                //console.log("currArtist" + JSON.stringify(currArtist))
-                r.artists.push({
-                    id: currArtist.id,
-                    name: currArtist.name,
-                    popu: currArtist.popularity//,
-                    //img: currArtist.images[0].url
-                })    
+                })//forEach track
+                res.json({
+                    statusCode: 200,
+                    message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                    actualResponse: {is: true, data: r},
+                    realResponse: body
+                })
             })
-            res.json(r)
-        })
-        .catch((err) => {
-            //Forbidden to access
-            if(err.statusCode === 403){
-                console.log(`error in ${options.url} call with status: ${err.statusCode}`)
-                console.log(`error in ${options.url} call with message: ${err.message}`)
-                res.json(err)
-            }
-            //need new AT
-            if(err.statusCode == 401){
-                console.log('AT invalid in GET /getPlaylists')
-                let opt = {
-                    url: baseURL + '/newAT',
-                    json: true
-                }
-                //call to our route GET /newAT
-                rp(opt)
-                    .then(async (body2) => {
-                        //update options
-                        currUser = null
-                        await User.findOne(lookFor, (err, curr_User) => {
-                            currUser = curr_User
-                            AT = curr_User.AT
-                        })
-                        options.headers = { 'Authorization': 'Bearer ' + AT }
-                        //
-                        //call to Spotify API: GET /users/{user_id}/playlists
-                        rp(options)
-                            .then((body3) => {
-                                console.log('completed GET /getArtists after creating new AT')
-                                artists_response = body3.items
-                                artists_response.forEach((currArtist) => {
-                                    r.push({
-                                        id: currArtist.id,
-                                        name: currArtist.name,
-                                        popu: currArtist.popularity,
-                                        img: currArtist.images[0].url
-                                    })    
+            .catch(async (err) => {
+                let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
+                console.log(`   in ${f_name}> sc = ${sc}`)
+                //need new AT
+                if(sc == 401){
+                    console.log(`   in ${f_name}> AT is invalid from call: ${call2}`)
+                    console.log(`   in ${f_name}> will attempt to get new AT for partially user: ${id.substr(0, 5)}`)
+                    //get new AT using our function
+                    get_new_AT(id)
+                        .then((mSuccess) => {   //new AT created successfully    
+                            console.log(`   in ${f_name}> partially new_AT from get_new_AT() is: ${mSuccess.access_token.substr(0, 10)}`)
+                            //call again
+                            options.headers = { 'Authorization': 'Bearer ' + mSuccess.access_token }
+                            rp(options)
+                                .then((body_apiCall2) => {
+                                    let r = {
+                                        tracks: []
+                                    }
+                                    let tracks_response = body_apiCall2.items
+                                    tracks_response.forEach((currTrack) => {
+                                        let flagMsg = null
+                                        if((currTrack.hasOwnProperty('track')) == false)
+                                            flagMsg = 'no property track'
+                                        if(currTrack.hasOwnProperty('track') == true && (currTrack.track.hasOwnProperty('artists') == false))
+                                            flagMas = 'no property artists'
+                                        if(currTrack.hasOwnProperty('track') == true && currTrack.track.hasOwnProperty('artists') == true && currTrack.track.artists.length < 1)
+                                            flagMsg = 'no tracks in playlist'
+                                        if(flagMsg != null){
+                                            res.json({
+                                                statusCode: 404,
+                                                message: `[${f_name} FAILED with message --${flagMsg}-- from: ${call2}]`,
+                                                actualResponse: {is: false},
+                                                realResponse: body_apiCall2
+                                            })
+                                        }
+                                        let artists_response = currTrack.track.artists
+                                        let artists = ''
+                                        artists_response.forEach((currArtist) => {
+                                            artists += currArtist.name + ', '
+                                        })
+                                        artists = artists.slice(0, artists.length-1-1)
+                                        let track_id   = currTrack.track.hasOwnProperty('id'  ) ? currTrack.track.id   : 'no id for track'
+                                        let track_name = currTrack.track.hasOwnProperty('name') ? currTrack.track.name : 'no name for playlist'
+                                        //add to r object
+                                        r.tracks.push({
+                                            id: track_id,
+                                            name: track_name,
+                                            artist: artists
+                                        })
+                                    })//forEach track
+                                    res.json({
+                                        statusCode: 200,
+                                        message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                                        actualResponse: {is: true, data: r},
+                                        realResponse: body_apiCall2
+                                    })
                                 })
-                                res.json(r)
-                                //res.json(body3)
+                                .catch((err_apiCall2) => {
+                                    let sc2 = err.hasOwnProperty('statusCode') ? err_apiCall2.statusCode : 999
+                                    let ms2 = err.hasOwnProperty('message'   ) ? err_apiCall2.message    : 'err: no message property'
+                                    res.json({
+                                        statusCode: sc2,
+                                        message: `[${f_name} FAILED with message: --${ms2}-- from_2_: ${call2}]`,
+                                        actualResponse: {is: false},
+                                        realResponse: err_apiCall2
+                                    })
+                                })//second call to API
+                        })
+                        .catch((mError) => {    //new AT wasn't created
+                            res.json({
+                                statusCode: mError.statusCode,
+                                message: `[${f_name} FAILED with message --${mError.message}-- from: get_new_AT()]`,
+                                actualResponse: {is: false},
+                                realResponse: mError
                             })
-                            .catch((err3) => {
-                                console.log('error in rp(options) second call with: ' + options.url)        
-                                console.log('error in rp(options) second call with err: ' + JSON.stringify(err3))
-                                console.log('error in rp(options) second call with status: ' + err3.statusCode)
-                                if(err3.statusCode === 401){
-                                    console.log('creating new AT in GET /getPlaylists FAILED! code=401')
-                                    res.json(err3)
-                                }
-                            })
+                        })
+                }
+                else{
+                    let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+                    res.json({
+                        statusCode: sc,
+                        message: `[${f_name} FAILED with message --${ms}-- from: ${call2}]`,
+                        actualResponse: {is: false},
+                        realResponse: err
                     })
-                    .catch((err2) => {
-                        console.log('error in rp(opt) with: ' + opt.url)
-                        res.json(err2)
-                    })
-            }
+                }
+            })//first call to API
+        })
+        .catch((err_getAT) => {
+            res.json({
+                statusCode: 404,
+                message: `[${f_name} FAILED with message: --${err_getAT}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: err_getAT
+            })
         })
 }
 //
-//get artist's top tracks
+/** GET /getTopArtists/id
+ *  @ gets user id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
+var getTopArtists = async function(req, res, next){
+    let f_name = '/GET getTopArtists', call1 = 'getAT()', call2= 'Spotify_API GET /me/top/artists'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
+    //
+    //get AT from DB using our funciton
+    var AT = 'invalid_AT for user: ' + id
+    getAT(id)
+        .then((resolve_getAT) => {
+            AT = resolve_getAT
+            //
+            var options = {
+                url: 'https://api.spotify.com/v1/me/top/artists?time_range=short_term&limit=5',
+                headers: { 'Authorization': 'Bearer ' + AT },
+                json: true
+            }
+            //call to Spotify API: GET /me/top/artists
+            rp(options)
+                .then((body_apiCall1) => {
+                    let r = {
+                        artists: []
+                    }
+                    let artists_response = body_apiCall1.items
+                    artists_response.forEach((currArtist) => {
+                        let art_id   = currArtist.hasOwnProperty('id'  ) ? currArtist.id   : 'no id for artist'
+                        let art_name   = currArtist.hasOwnProperty('name'  ) ? currArtist.name   : 'no name for artist'
+                        let art_popu   = currArtist.hasOwnProperty('popularity'  ) ? currArtist.popularity   : 'no popularity for artist'
+                        r.artists.push({
+                            id: art_id,
+                            name: art_name,
+                            popu: art_popu
+                        })    
+                    })
+                    res.json({
+                        statusCode: 200,
+                        message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                        actualResponse: {is: true, data: r},
+                        realResponse: body_apiCall1
+                    })
+                })
+                .catch(async (err_apiCall1) => {
+                    let sc = err_apiCall1.hasOwnProperty('statusCode') ? err_apiCall1.statusCode : 999
+                    //need new AT
+                    if(sc == 401){
+                        console.log(`   in ${f_name}> AT is invalid from call: ${call2}`)
+                        console.log(`   in ${f_name}> will attempt to get new AT for partially user: ${id.substr(0, 5)}`)
+                        //get new AT using our function
+                        get_new_AT(id)
+                            .then((resolve_get_new_AT) => {
+                                console.log(`   in ${f_name}> partially new_AT from get_new_AT() is: ${resolve_get_new_AT.access_token.substr(0, 10)}`)
+                                //call again
+                                options.headers = { 'Authorization': 'Bearer ' + resolve_get_new_AT.access_token }
+                                rp(options)
+                                    .then((body_apiCall2) => {
+                                        let r = {
+                                            artists: []
+                                        }
+                                        let artists_response = body_apiCall2.items
+                                        artists_response.forEach((currArtist) => {
+                                            let art_id   = currArtist.hasOwnProperty('id'  ) ? currArtist.id   : 'no id for artist'
+                                            let art_name   = currArtist.hasOwnProperty('name'  ) ? currArtist.name   : 'no name for artist'
+                                            let art_popu   = currArtist.hasOwnProperty('popularity'  ) ? currArtist.popularity   : 'no popularity for artist'
+                                            r.artists.push({
+                                                id: art_id,
+                                                name: art_name,
+                                                popu: art_popu
+                                            })    
+                                        })
+                                        res.json({
+                                            statusCode: 200,
+                                            message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                                            actualResponse: {is: true, data: r},
+                                            realResponse: body_apiCall2
+                                        })
+                                    })
+                                    .catch((err_apiCall2) => {
+                                        let sc2 = err_apiCall2.hasOwnProperty('statusCode') ? err_apiCall2.statusCode : 999
+                                        let ms2 = err_apiCall2.hasOwnProperty('message'   ) ? err_apiCall2.message    : 'err: no message property'
+                                        res.json({
+                                            statusCode: sc2,
+                                            message: `[${f_name} FAILED with message: --${ms2}-- from_2_: ${call2}]`,
+                                            actualResponse: {is: false},
+                                            realResponse: err_apiCall2
+                                        })
+                                    })//second call to API
+                            })
+                            .catch((reject_get_new_AT) => {    //new AT wasn't created
+                                res.json({
+                                    statusCode: reject_get_new_AT.statusCode,
+                                    message: `[${f_name} FAILED with message --${reject_get_new_AT.message}-- from: get_new_AT()]`,
+                                    actualResponse: {is: false},
+                                    realResponse: reject_get_new_AT
+                                })
+                            })
+                    }
+                    else{
+                        let ms = err_apiCall1.hasOwnProperty('message'   ) ? err_apiCall1.message    : 'err: no message property'
+                        res.json({
+                            statusCode: sc,
+                            message: `[${f_name} FAILED with message --${ms}-- from: ${call2}]`,
+                            actualResponse: {is: false},
+                            realResponse: err_apiCall1
+                        })
+                    }
+                })//first call to API
+        })
+        .catch((reject_getAT) => {
+            res.json({
+                statusCode: 404,
+                message: `[${f_name} FAILED with message: --${reject_getAT}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: reject_getAT
+            })
+        })
+}
+//
+/** GET /artistTopTracks/id&art_id
+ *  @ gets user_id & artist_id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
 var artistTopTracks = async function(req, res, next){
-    console.log("artistTopTracks()")
+    let f_name = 'GET /artistTopTracks/id&art_id', call1 = 'getAT()', call2= 'Spotify_API GET /artists/artist_id/top-tracks'
+    console.log(`starting ${f_name}`)
     const {id = null} = req.params
     const {art_id = null} = req.params
-    var lookFor = {
-        'id' : id
-    }
-    //getting user from DB
-    let currUser = null
-    var AT = 'invalid_AT for user: ' + id
-    await User.findOne(lookFor, (err, curr_User) => {
-        currUser = curr_User
-        AT = curr_User.AT
-        //console.log(`found userID: ${curr_User.id} with AT: ${AT}`)
-    })
     //
-    //creating API call
-    let api_url = 'https://api.spotify.com/v1/artists/' + art_id + '/top-tracks?country=IL'
-    var options = {
-        url: api_url,
-        headers: { 'Authorization': 'Bearer ' + AT },
-        json: true
-    };
-    //call to Spotify API: GET /users/{user_id}/playlists
-    rp(options)
-        .then((body) => {
-            let r = {
-                tracks: []
+    //get AT from DB using our funciton
+    var AT = 'invalid_AT for user: ' + id
+    getAT(id)
+        .then((resolve_getAT) => {
+            AT = resolve_getAT
+            //
+            let api_url = 'https://api.spotify.com/v1/artists/' + art_id + '/top-tracks?country=IL'
+            var options = {
+                url: api_url,
+                headers: { 'Authorization': 'Bearer ' + AT },
+                json: true
             }
-            let tracks_response = body.tracks
-            tracks_response.forEach((currTrack) => {
-                //console.log("currArtist" + JSON.stringify(currArtist))
-                r.tracks.push({
-                    id: currTrack.id
-                })    
-            })
-            res.json(r)
-        })
-        .catch((err) => {
-            //Forbidden to access
-            if(err.statusCode === 403){
-                console.log(`error in ${options.url} call with status: ${err.statusCode}`)
-                console.log(`error in ${options.url} call with message: ${err.message}`)
-                res.json(err)
-            }
-            //need new AT
-            if(err.statusCode == 401){
-                console.log('AT invalid in GET /artistTopTracks')
-                let opt = {
-                    url: baseURL + '/newAT',
-                    json: true
-                }
-                //call to our route GET /newAT
-                rp(opt)
-                    .then(async (body2) => {
-                        //update options
-                        currUser = null
-                        await User.findOne(lookFor, (err, curr_User) => {
-                            currUser = curr_User
-                            AT = curr_User.AT
-                        })
-                        options.headers = { 'Authorization': 'Bearer ' + AT }
-                        //
-                        //call to Spotify API: GET /users/{user_id}/playlists
-                        rp(options)
-                            .then((body3) => {
-                                console.log('completed GET /artistTopTracks after creating new AT')
-                                tracks_response = body3.tracks
-                                tracks_response.forEach((currTrack) => {
-                                    //console.log("currArtist" + JSON.stringify(currArtist))
-                                    r.tracks.push({
-                                        id: currTrack.id
-                                    })    
+            //call to Spotify API: GET /artists/artist_id/top-tracks
+            rp(options)
+                .then((body_apiCall1) => {
+                    let r = {
+                        tracks: []
+                    }
+                    let tracks_response = body_apiCall1.tracks
+                    tracks_response.forEach((currTrack) => {
+                        //console.log("currArtist" + JSON.stringify(currArtist))
+                        r.tracks.push({
+                            id: currTrack.id
+                        })    
+                    })
+                    res.json({
+                        statusCode: 200,
+                        message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                        actualResponse: {is: true, data: r},
+                        realResponse: body_apiCall1
+                    })
+                })
+                .catch(async (err_apiCall1) => {
+                    let sc = err_apiCall1.hasOwnProperty('statusCode') ? err_apiCall1.statusCode : 999
+                    //need new AT
+                    if(sc == 401){
+                        console.log(`   in ${f_name}> AT is invalid from call: ${call2}`)
+                        console.log(`   in ${f_name}> will attempt to get new AT for partially user: ${id.substr(0, 5)}`)
+                        //get new AT using our function
+                        get_new_AT(id)
+                            .then((resolve_get_new_AT) => {
+                                console.log(`   in ${f_name}> partially new_AT from get_new_AT() is: ${resolve_get_new_AT.access_token.substr(0, 10)}`)
+                                //call again
+                                options.headers = { 'Authorization': 'Bearer ' + resolve_get_new_AT.access_token }
+                                rp(options)
+                                    .then((body_apiCall2) => {
+                                        let r = {
+                                            tracks: []
+                                        }
+                                        let tracks_response = body_apiCall2.tracks
+                                        tracks_response.forEach((currTrack) => {
+                                            //console.log("currArtist" + JSON.stringify(currArtist))
+                                            r.tracks.push({
+                                                id: currTrack.id
+                                            })    
+                                        })
+                                        res.json({
+                                            statusCode: 200,
+                                            message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                                            actualResponse: {is: true, data: r},
+                                            realResponse: body_apiCall2
+                                        })
+                                    })
+                                    .catch((err_apiCall2) => {
+                                        let sc2 = err_apiCall2.hasOwnProperty('statusCode') ? err_apiCall2.statusCode : 999
+                                        let ms2 = err_apiCall2.hasOwnProperty('message'   ) ? err_apiCall2.message    : 'err: no message property'
+                                        res.json({
+                                            statusCode: sc2,
+                                            message: `[${f_name} FAILED with message: --${ms2}-- from_2_: ${call2}]`,
+                                            actualResponse: {is: false},
+                                            realResponse: body_apiCall2
+                                        })
+                                    })//second call to API
+                            })
+                            .catch((reject_get_new_AT) => {    //new AT wasn't created
+                                res.json({
+                                    statusCode: reject_get_new_AT.statusCode,
+                                    message: `[${f_name} FAILED with message --${reject_get_new_AT.message}-- from: get_new_AT()]`,
+                                    actualResponse: {is: false},
+                                    realResponse: reject_get_new_AT
                                 })
-                                res.json(r)
-                                //res.json(body3)
                             })
-                            .catch((err3) => {
-                                console.log('error in rp(options) second call with: ' + options.url)        
-                                console.log('error in rp(options) second call with err: ' + JSON.stringify(err3))
-                                console.log('error in rp(options) second call with status: ' + err3.statusCode)
-                                if(err3.statusCode === 401){
-                                    console.log('creating new AT in GET /artistTopTracks FAILED! code=401')
-                                    res.json(err3)
-                                }
-                            })
-                    })
-                    .catch((err2) => {
-                        console.log('error in rp(opt) with: ' + opt.url)
-                        res.json(err2)
-                    })
-            }
+                    }
+                    else{
+                        let ms = err_apiCall1.hasOwnProperty('message'   ) ? err_apiCall1.message    : 'err: no message property'
+                        res.json({
+                            statusCode: sc,
+                            message: `[${f_name} FAILED with message --${ms}-- from: ${call2}]`,
+                            actualResponse: {is: false},
+                            realResponse: err_apiCall1
+                        })
+                    }
+                })//first call to API
+        })
+        .catch((reject_getAT) => {
+            res.json({
+                statusCode: 404,
+                message: `[${f_name} FAILED with message: --${reject_getAT}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: reject_getAT
+            })
         })
 }
 //
-//new Pl
+/** POST /newPL/id
+ *  @ gets user_id from querystring
+ *  @ gets from body optional parameters: name/public/collaborative/description
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
 var newPL = async function(req, res, next){
-    console.log('starting newPL()')
+    let f_name = 'POST /newPL/id', call1 = 'getAT()', call2= 'Spotify_API POST /users/{user_id}/playlists'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
     //body data
     const name          = req.body.hasOwnProperty('name'         ) ? req.body.name          : "default name"
     const public        = req.body.hasOwnProperty('public'       ) ? req.body.public        : true
     const collaborative = req.body.hasOwnProperty('collaborative') ? req.body.collaborative : false
     const description   = req.body.hasOwnProperty('description'  ) ? req.body.description   : "some nice description"
     //
-    const {id = null} = req.params
-    var lookFor = {
-        'id' : id
-    }
-    //getting user from DB
-    let currUser = null
+    //get AT from DB using our funciton
     var AT = 'invalid_AT for user: ' + id
-    await User.findOne(lookFor, (err, curr_User) => {
-        currUser = curr_User
-        AT = curr_User.AT
-        //console.log(`found userID: ${curr_User.id} with AT: ${AT}`)
-    })
-    //
-    //call to Spotify API: POST /api/token
-    let api_uri = 'https://api.spotify.com/v1/users/' + id + '/playlists'
-    let options = {
-        method: 'POST',
-        uri: api_uri,
-        headers: {
-            'content-type': 'application/json',
-            'Authorization': 'Bearer ' + AT
-        },
-        body: {
-            name: name,
-            public: public,
-            collaborative: collaborative,
-            description: description
-        },
-        json: true
-    };
-    //
-    //call to Spotify API: POST /users/{user_id}/playlists
-    rp(options)
-        .then((body) => {
-            res.json({
-                id: body.id
-            })
-        })
-        .catch((err) => {
-            //Forbidden to access
-            if(err.statusCode === 403){
-                console.log(`error in ${options.url} call with status: ${err.statusCode}`)
-                console.log(`error in ${options.url} call with message: ${err.message}`)
-                res.json(err)
+    getAT(id)
+        .then((resolve_getAT) => {
+            AT = resolve_getAT
+            //
+            let api_uri = 'https://api.spotify.com/v1/users/' + id + '/playlists'
+            var options = {
+                method: 'POST',
+                uri: api_uri,
+                headers: {
+                    'content-type': 'application/json',
+                    'Authorization': 'Bearer ' + AT
+                },
+                body: {
+                    name: name,
+                    public: public,
+                    collaborative: collaborative,
+                    description: description
+                },
+                json: true
             }
-            //need new AT
-            if(err.statusCode == 401){
-                console.log('AT invalid in POST /newPL')
-                let opt = {
-                    url: baseURL + '/newAT',
-                    json: true
-                }
-                //call to our route GET /newAT
-                rp(opt)
-                    .then(async (body2) => {
-                        //update options
-                        currUser = null
-                        await User.findOne(lookFor, (err, curr_User) => {
-                            currUser = curr_User
-                            AT = curr_User.AT
-                        })
-                        options.headers = { 
-                            'content-type': 'application/json',
-                            'Authorization': 'Bearer ' + AT
-                        }
-                        //
-                        //call to Spotify API: GET /users/{user_id}/playlists
-                        rp(options)
-                            .then((body3) => {
-                                console.log('completed POST /newPL after creating new AT')
-                                tracks_response = body3.tracks
-                                tracks_response.forEach((currTrack) => {
-                                    //console.log("currArtist" + JSON.stringify(currArtist))
-                                    r.tracks.push({
-                                        id: currTrack.id
-                                    })    
-                                })
-                                res.json(r)
-                                //res.json(body3)
-                            })
-                            .catch((err3) => {
-                                console.log('error in rp(options) second call with: ' + options.url)        
-                                console.log('error in rp(options) second call with err: ' + JSON.stringify(err3))
-                                console.log('error in rp(options) second call with status: ' + err3.statusCode)
-                                if(err3.statusCode === 401){
-                                    console.log('creating new AT in POST /newPL FAILED! code=401')
-                                    res.json(err3)
+            //call to Spotify API: POST /users/{pl_id}/playlists
+            rp(options)
+                .then((body_apiCall1) => {
+                    let r = {
+                        id: 'error id',
+                        name: 'error name'
+                    }
+                    r.id   = body_apiCall1.hasOwnProperty('id'  ) ? body_apiCall1.id   : 'no id for new playlist'
+                    r.name = body_apiCall1.hasOwnProperty('name') ? body_apiCall1.name : 'no name for new playlist'
+                    res.json({
+                        statusCode: 200,
+                        message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                        actualResponse: {is: true, data: r},
+                        realResponse: body_apiCall1
+                    })
+                })
+                .catch(async (err_apiCall1) => {
+                    let sc = err_apiCall1.hasOwnProperty('statusCode') ? err_apiCall1.statusCode : 999
+                    //need new AT
+                    if(sc == 401){
+                        console.log(`   in ${f_name}> AT is invalid from call: ${call2}`)
+                        console.log(`   in ${f_name}> will attempt to get new AT for partially user: ${id.substr(0, 5)}`)
+                        //get new AT using our function
+                        get_new_AT(id)
+                            .then((resolve_get_new_AT) => {
+                                console.log(`   in ${f_name}> partially new_AT from get_new_AT() is: ${resolve_get_new_AT.access_token.substr(0, 10)}`)
+                                //call again
+                                options.headers = { 
+                                    'content-type': 'application/json',
+                                    'Authorization': 'Bearer ' + resolve_get_new_AT.access_token
                                 }
+                                rp(options)
+                                    .then((body_apiCall2) => {
+                                        let r = {
+                                            id: 'error id',
+                                            name: 'error name'
+                                        }
+                                        r.id   = body_apiCall2.hasOwnProperty('id'  ) ? body_apiCall2.id   : 'no id for new playlist'
+                                        r.name = body_apiCall2.hasOwnProperty('name') ? body_apiCall2.name : 'no name for new playlist'
+                                        res.json({
+                                            statusCode: 200,
+                                            message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                                            actualResponse: {is: true, data: r},
+                                            realResponse: body_apiCall2
+                                        })
+                                    })
+                                    .catch((err_apiCall2) => {
+                                        let sc2 = err_apiCall2.hasOwnProperty('statusCode') ? err_apiCall2.statusCode : 999
+                                        let ms2 = err_apiCall2.hasOwnProperty('message'   ) ? err_apiCall2.message    : 'err: no message property'
+                                        res.json({
+                                            statusCode: sc2,
+                                            message: `[${f_name} FAILED with message: --${ms2}-- from_2_: ${call2}]`,
+                                            actualResponse: {is: false},
+                                            realResponse: err_apiCall2
+                                        })
+                                    })//second call to API
                             })
-                    })
-                    .catch((err2) => {
-                        console.log('error in rp(opt) with: ' + opt.url)
-                        res.json(err2)
-                    })
-            }
+                            .catch((reject_get_new_AT) => {    //new AT wasn't created
+                                res.json({
+                                    statusCode: reject_get_new_AT.statusCode,
+                                    message: `[${f_name} FAILED with message --${reject_get_new_AT.message}-- from: get_new_AT()]`,
+                                    actualResponse: {is: false},
+                                    realResponse: reject_get_new_AT
+                                })
+                            })
+                    }
+                    else{
+                        let ms = err_apiCall1.hasOwnProperty('message'   ) ? err_apiCall1.message    : 'err: no message property'
+                        res.json({
+                            statusCode: sc,
+                            message: `[${f_name} FAILED with message --${ms}-- from: ${call2}]`,
+                            actualResponse: {is: false},
+                            realResponse: err_apiCall1
+                        })
+                    }
+                })//first call to API
+        })
+        .catch((reject_getAT) => {
+            res.json({
+                statusCode: 404,
+                message: `[${f_name} FAILED with message: --${reject_getAT}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: reject_getAT
+            })
         })
 }
 //
-//add to PL
+/** PUT /addToPL/id&pl_id
+ *  @ gets user_id & pl_id from querystring
+ *  @ gets from body optional parameters: uris[spotify:track:track_id, ...]
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
 var addToPL = async function(req, res, next){
-    console.log('starting addToPL()')
+    let f_name = '/PUT addToPL/id&pl_id', call1 = 'getAT()', call2= 'Spotify_API POST /playlists/{pl_id}/tracks'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
+    const {pl_id = null} = req.params
     //body data
     var default_track = ["spotify:track:1JLLDS0KN1ITeYL9ikHKIr"]
     const uris = req.body.hasOwnProperty('uris') ? req.body.uris : default_track
     //
-    const {id = null} = req.params
-    const {pl_id = null} = req.params
-    var lookFor = {
-        'id' : id
-    }
-    //getting user from DB
-    let currUser = null
+    //get AT from DB using our funciton
     var AT = 'invalid_AT for user: ' + id
-    await User.findOne(lookFor, (err, curr_User) => {
-        currUser = curr_User
-        AT = curr_User.AT
-        //console.log(`found userID: ${curr_User.id} with AT: ${AT}`)
-    })  
-    //
-    //call to Spotify API: POST /api/token
-    let api_uri = 'https://api.spotify.com/v1/playlists/' + pl_id + '/tracks'
-    let options = {
-        method: 'POST',
-        uri: api_uri,
-        headers: {
-            'content-type': 'application/json',
-            'Authorization': 'Bearer ' + AT
-        },
-        body: {
-            uris: uris
-        },
-        json: true
-    };
-    //
-    //call to Spotify API: POST /users/{user_id}/playlists
-    rp(options)
-        .then((body) => {
-            res.json(body.snapshot_id)
-        })
-        .catch((err) => {
-            //Forbidden to access
-            if(err.statusCode === 403){
-                console.log(`error in ${options.url} call with status: ${err.statusCode}`)
-                console.log(`error in ${options.url} call with message: ${err.message}`)
-                res.json(err)
+    getAT(id)
+        .then((resolve_getAT) => {
+            AT = resolve_getAT
+            //
+            let api_uri = 'https://api.spotify.com/v1/playlists/' + pl_id + '/tracks'
+            var options = {
+                method: 'POST',
+                uri: api_uri,
+                headers: {
+                    'content-type': 'application/json',
+                    'Authorization': 'Bearer ' + AT
+                },
+                body: {
+                    uris: uris
+                },
+                json: true
             }
-            //need new AT
-            if(err.statusCode == 401){
-                console.log('AT invalid in POST /addToPL')
-                let opt = {
-                    url: baseURL + '/newAT',
-                    json: true
-                }
-                //call to our route GET /newAT
-                rp(opt)
-                    .then(async (body2) => {
-                        //update options
-                        currUser = null
-                        await User.findOne(lookFor, (err, curr_User) => {
-                            currUser = curr_User
-                            AT = curr_User.AT
-                        })
-                        options.headers = { 
-                            'content-type': 'application/json',
-                            'Authorization': 'Bearer ' + AT
-                        }
-                        //
-                        //call to Spotify API: GET /users/{user_id}/playlists
-                        rp(options)
-                            .then((body3) => {
-                                console.log('completed POST /addToPL after creating new AT')
-                                res.json(body.snapshot_id)
-                                //res.json(body3)
-                            })
-                            .catch((err3) => {
-                                console.log('error in rp(options) second call with: ' + options.url)        
-                                console.log('error in rp(options) second call with err: ' + JSON.stringify(err3))
-                                console.log('error in rp(options) second call with status: ' + err3.statusCode)
-                                if(err3.statusCode === 401){
-                                    console.log('creating new AT in POST /addToPL FAILED! code=401')
-                                    res.json(err3)
+            //call to Spotify API: POST /playlists/{pl_id}/tracks
+            rp(options)
+                .then((body_apiCall1) => {
+                    let r = {
+                        snap_id: 'error snap_id'
+                    }
+                    r.snap_id = body_apiCall1.hasOwnProperty('snapshot_id'  ) ? body_apiCall1.snapshot_id   : 'no snap_id for new playlist'
+                    res.json({
+                        statusCode: 200,
+                        message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                        actualResponse: {is: true, data: r},
+                        realResponse: body_apiCall1
+                    })
+                })
+                .catch(async (err_apiCall1) => {
+                    let sc = err_apiCall1.hasOwnProperty('statusCode') ? err_apiCall1.statusCode : 999
+                    //need new AT
+                    if(sc == 401){
+                        console.log(`   in ${f_name}> AT is invalid from call: ${call2}`)
+                        console.log(`   in ${f_name}> will attempt to get new AT for partially user: ${id.substr(0, 5)}`)
+                        //get new AT using our function
+                        get_new_AT(id)
+                            .then((resolve_get_new_AT) => {
+                                console.log(`   in ${f_name}> partially new_AT from get_new_AT() is: ${resolve_get_new_AT.access_token.substr(0, 10)}`)
+                                //call again
+                                options.headers = { 
+                                    'content-type': 'application/json',
+                                    'Authorization': 'Bearer ' + resolve_get_new_AT.access_token
                                 }
+                                rp(options)
+                                    .then((body_apiCall2) => {
+                                        let r = {
+                                            snap_id: 'error snap_id'
+                                        }
+                                        r.snap_id = body_apiCall2.hasOwnProperty('snapshot_id'  ) ? body_apiCall2.snapshot_id   : 'no snap_id for new playlist'
+                                        res.json({
+                                            statusCode: 200,
+                                            message: `[${f_name} SUCCESS with message --success-- from: ${call2}]`,
+                                            actualResponse: {is: true, data: r},
+                                            realResponse: body_apiCall2
+                                        })
+                                    })
+                                    .catch((err_apiCall2) => {
+                                        let sc2 = err_apiCall2.hasOwnProperty('statusCode') ? err_apiCall2.statusCode : 999
+                                        let ms2 = err_apiCall2.hasOwnProperty('message'   ) ? err_apiCall2.message    : 'err: no message property'
+                                        res.json({
+                                            statusCode: sc2,
+                                            message: `[${f_name} FAILED with message: --${ms2}-- from_2_: ${call2}]`,
+                                            actualResponse: {is: false},
+                                            realResponse: err_apiCall2
+                                        })
+                                    })//second call to API
                             })
-                    })
-                    .catch((err2) => {
-                        console.log('error in rp(opt) with: ' + opt.url)
-                        res.json(err2)
-                    })
-            }
+                            .catch((reject_get_new_AT) => {    //new AT wasn't created
+                                res.json({
+                                    statusCode: reject_get_new_AT.statusCode,
+                                    message: `[${f_name} FAILED with message --${reject_get_new_AT.message}-- from: get_new_AT()]`,
+                                    actualResponse: {is: false},
+                                    realResponse: reject_get_new_AT
+                                })
+                            })
+                    }
+                    else{
+                        let ms = err_apiCall1.hasOwnProperty('message'   ) ? err_apiCall1.message    : 'err: no message property'
+                        res.json({
+                            statusCode: sc,
+                            message: `[${f_name} FAILED with message --${ms}-- from: ${call2}]`,
+                            actualResponse: {is: false},
+                            realResponse: err_apiCall1
+                        })
+                    }
+                })//first call to API
+        })
+        .catch((reject_getAT) => {
+            res.json({
+                statusCode: 404,
+                message: `[${f_name} FAILED with message: --${reject_getAT}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: reject_getAT
+            })
         })
 }
 //
@@ -883,8 +1201,9 @@ module.exports = {
     welcomeMsg: welcomeMsg,
     getPlaylists: getPlaylists,
     getTracks: getTracks,
-    getArtists: getArtists,
+    getTopArtists: getTopArtists,
     artistTopTracks: artistTopTracks,
     newPL: newPL,
-    addToPL: addToPL
+    addToPL: addToPL,
+    invalidAT: invalidAT
 }
