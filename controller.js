@@ -179,6 +179,43 @@ async function make_invalidAT(uid){
     })
 }
 //
+/** function
+ *  @ gets user AT
+ *  @ Spotify call GET /me. to get logged in user data 
+ *  @ returns new Promise:
+ *  @ resolve   :   {status, message, realResponse}
+ *  @ reject    :   {status, message, realResponse}
+ */
+async function s_api_me(myAT){
+    var f_name ='s_api_me()', call1 = 'Spotify_API GET /me', call2 = 'call2'
+    console.log(`starting ${f_name}`)
+    console.log(`   in ${f_name}> received partially AT: ${myAT.substr(0, 10)}`)
+    return new Promise(async (resolve, reject) =>{
+        var options = {
+            url: 'https://api.spotify.com/v1/me',
+            headers: { 'Authorization': 'Bearer ' + myAT },
+            json: true
+        }
+        rp(options)
+            .then((body) => {
+                resolve({
+                    statusCode: 200,
+                    message: `[${f_name} SUCCESS with message --success-- from: ${call1}]`,
+                    realResponse: body
+                })
+            })
+            .catch((err) => {
+                let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
+                let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+                reject({
+                    statusCode: sc,
+                    message: `[${f_name} FAILED with message: --${ms}-- from: ${call1}]`,
+                    realResponse: err
+                })
+            })
+    })//new Promise
+}
+//
 //
 //ROUTES implementations
 //
@@ -245,43 +282,6 @@ var newAT = async function(req, res, next){
                 realResponse: mError
             })
         })
-}
-//
-/** function
- *  @ gets user AT
- *  @ Spotify call GET /me. to get logged in user data 
- *  @ returns new Promise:
- *  @ resolve   :   {status, message, realResponse}
- *  @ reject    :   {status, message, realResponse}
- */
-async function s_api_me(myAT){
-    var f_name ='s_api_me()', call1 = 'Spotify_API GET /me', call2 = 'call2'
-    console.log(`starting ${f_name}`)
-    console.log(`   in ${f_name}> received partially AT: ${myAT.substr(0, 10)}`)
-    return new Promise(async (resolve, reject) =>{
-        var options = {
-            url: 'https://api.spotify.com/v1/me',
-            headers: { 'Authorization': 'Bearer ' + myAT },
-            json: true
-        }
-        rp(options)
-            .then((body) => {
-                resolve({
-                    statusCode: 200,
-                    message: `[${f_name} SUCCESS with message --success-- from: ${call1}]`,
-                    realResponse: body
-                })
-            })
-            .catch((err) => {
-                let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
-                let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
-                reject({
-                    statusCode: sc,
-                    message: `[${f_name} FAILED with message: --${ms}-- from: ${call1}]`,
-                    realResponse: err
-                })
-            })
-    })//new Promise
 }
 //
 /** GET /basicData/id
@@ -391,6 +391,52 @@ var welcomeMsg = async function(req, res, next){
             let r_relevant_JSON = JSON.parse(JSON.stringify(r_find[0]))
             r.un  = r_relevant_JSON.hasOwnProperty('name') ? r_relevant_JSON.name : 'no name for user'
             r.img = r_relevant_JSON.hasOwnProperty('img' ) ? r_relevant_JSON.img  : '#'
+            res.json({
+                statusCode: 200,
+                message: `[${f_name} SUCCESS with message: --success-- from: ${call1}]`,
+                actualResponse: {is: true, data: r},
+                realResponse: r_find
+            })
+        })
+        .catch((err) => {
+            let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
+            let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+            res.json({
+                statusCode: sc,
+                message: `[${f_name} FAILED with message: --${ms}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: err
+            })
+        })
+}
+//
+/** GET /getHistory/id
+ *  @ gets user id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
+var getHistory = async function(req, res, next){
+    let f_name = '/GET getHistory/id', call1 = 'find()', call2= 'call2'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
+    //
+    //getting user from DB
+    let lookFor = {
+        'id' : id
+    }
+    let r ={
+        un: id,
+        len: -1,
+        history : []
+    }
+    User.find(lookFor).exec()
+        .then((r_find) => {
+            let err_history = ['no history for user']
+            let r_relevant_JSON = JSON.parse(JSON.stringify(r_find[0]))
+            r.history  = r_relevant_JSON.hasOwnProperty('history') ? r_relevant_JSON.history : err_history
+            r.len = r.history.length
             res.json({
                 statusCode: 200,
                 message: `[${f_name} SUCCESS with message: --success-- from: ${call1}]`,
@@ -948,6 +994,172 @@ var artistTopTracks = async function(req, res, next){
         })
 }
 //
+/** GET /makePLbyArtist/id&art_id
+ *  @ gets user_id & artist_id from querystring
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
+var makePLbyArtist = async function(req, res, next){
+    let f_name = 'GET /makePLbyArtist/id&art_id'
+    let call1  = 'get_new_AT()'
+    let call2  = 'GET /artistTopTracks/:id&:art_id'
+    let call3  = 'GET spotify/artists/{artist_id}'
+    let call4  = 'POST /newPL/:id'
+    let call5  = 'PUT /addToPL/:id&:pl_id'
+    let call6  = 'PUT /addHistory/:id'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
+    const {art_id = null} = req.params
+    //
+    var my_uris = {
+        uris: []
+    }
+    var AT = ''
+    //get newAT
+    get_new_AT(id)
+        .then((resolve_get_new_AT) =>{
+            AT = resolve_get_new_AT.access_token
+            console.log(`   in ${f_name}> partially new_AT from get_new_AT() is: ${AT.substr(0, 10)}`)
+            let options_topTracks = {
+                url: baseURL + '/artistTopTracks/' + id + '&' + art_id,
+                json: true
+            }
+            rp(options_topTracks)
+                //get artist's top tracks
+                .then((resolve_topTracks) => {
+                    let artist_tracks = resolve_topTracks.actualResponse.data.tracks
+                    artist_tracks.forEach((currTrack) => {
+                        let curr_trackURI = 'spotify:track:' + currTrack.id
+                        my_uris.uris.push(curr_trackURI)
+                    })
+                //get artist's name
+                    let options_getArtist = {
+                        url: 'https://api.spotify.com/v1/artists/' + art_id,
+                        headers: { 'Authorization': 'Bearer ' + AT },
+                        json: true
+                    }
+                    rp(options_getArtist)
+                        .then((resolve_getArtist) => {
+                            let newPL_len = my_uris.uris.length
+                            let err_name = 'no name found for artist id: ' + art_id
+                            let artist_name = resolve_getArtist.hasOwnProperty('name') ? resolve_getArtist.name : err_name
+                            let pl_name = 'Awesome PL of ' + artist_name
+                            let pl_desc = `This awesome playlist based on ${artist_name}'s top tracks with ${newPL_len} tracks was created by REST course spotify service`
+                //create new PL
+                            let options_newPL = {
+                                method: 'POST',
+                                uri: baseURL + '/newPL/' + id,
+                                headers: {'content-type': 'application/json'},
+                                body: {
+                                    name: pl_name,
+                                    description: pl_desc
+                                },
+                                json: true
+                            }
+                            rp(options_newPL)
+                                .then((resolve_newPL) => {
+                                    let newPL_id = resolve_newPL.actualResponse.data.id
+                //add my_uris to newPL
+                                    let options_addToPL = {
+                                        method: 'PUT',
+                                        uri: baseURL + '/addToPL/' + id + '&' + newPL_id,
+                                        headers: {'content-type': 'application/json'},
+                                        body: { uris: my_uris.uris },
+                                        json: true
+                                    }
+                                    rp(options_addToPL)
+                                        .then((resolve_addToPL) => {
+                //add to history
+                                            let history_body = {
+                                                code: 3,
+                                                desc: `new playlist created: ${pl_name} with ${newPL_len} tracks based on: ${artist_name}`,
+                                                pl_1: newPL_id,
+                                                art_id: art_id,
+                                                art_name: artist_name
+                                            }
+                                            let options_addHistory = {
+                                                method: 'PUT',
+                                                uri: baseURL + '/addHistory/' + id,
+                                                headers: {'content-type': 'application/json'},
+                                                body: { history_body },
+                                                json: true
+                                            }
+                                            rp(options_addHistory)
+                                                .then((resolve_addHistory) => {
+                                                    let r = {
+                                                        id: newPL_id,
+                                                        name: pl_name,
+                                                        description: pl_desc,
+                                                        snap_id: resolve_addToPL.actualResponse.data.snap_id
+                                                    }
+                                                    res.json({
+                                                        statusCode: 200,
+                                                        message: `[${f_name} SUCCESS with message --${resolve_addToPL.message}-- from: ${call5}]`,
+                                                        actualResponse: {is: true, data: r},
+                                                        realResponse: resolve_addToPL.realResponse
+                                                    })
+                                                })
+                                                .catch((reject_addHistory) => {
+                                                    res.json({
+                                                        statusCode: reject_addHistory.statusCode,
+                                                        message: `[${f_name} FAILED with message --${reject_addHistory.message}-- from: ${call6}]`,
+                                                        actualResponse: {is: false},
+                                                        realResponse: reject_addHistory.realResponse
+                                                    })
+                                                })
+                                        })
+                                        .catch((reject_addToPL) => {
+                                            res.json({
+                                                statusCode: reject_addToPL.statusCode,
+                                                message: `[${f_name} FAILED with message --${reject_addToPL.message}-- from: ${call5}]`,
+                                                actualResponse: {is: false},
+                                                realResponse: reject_addToPL.realResponse
+                                            })
+                                        })
+                                })
+                                .catch((reject_newPL) => {
+                                    res.json({
+                                        statusCode: reject_newPL.statusCode,
+                                        message: `[${f_name} FAILED with message --${reject_newPL.message}-- from: ${call4}]`,
+                                        actualResponse: {is: false},
+                                        realResponse: reject_newPL.realResponse
+                                    })
+                                })
+                        })
+                        .catch((reject_getArtist) => {
+                            let cs = reject_getArtist.hasOwnProperty('statusCode') ? reject_getArtist.statusCode : 999
+                            let ms = reject_getArtist.hasOwnProperty('message'   ) ? reject_getArtist.message    : 'no message'
+                            res.json({
+                                statusCode: cs,
+                                message: `[${f_name} FAILED with message --${ms}-- from: ${call3}]`,
+                                actualResponse: {is: false},
+                                realResponse: reject_getArtist
+                            })
+                        })
+                })
+                .catch((reject_topTracks) => {
+                    res.json({
+                        statusCode: reject_topTracks.statusCode,
+                        message: `[${f_name} FAILED with message --${reject_topTracks.message}-- from: ${call2}]`,
+                        actualResponse: {is: false},
+                        realResponse: reject_topTracks.realResponse
+                    })
+                })
+        })
+        //new AT wasn't created
+        .catch((reject_get_new_AT) => {
+            res.json({
+                statusCode: reject_get_new_AT.statusCode,
+                message: `[${f_name} FAILED with message --${reject_get_new_AT.message}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: reject_get_new_AT.realResponse
+            })
+        })
+    
+}
+//
 /** POST /newPL/id
  *  @ gets user_id from querystring
  *  @ gets from body optional parameters: name/public/collaborative/description
@@ -1169,7 +1381,7 @@ var addToPL = async function(req, res, next){
                                     statusCode: reject_get_new_AT.statusCode,
                                     message: `[${f_name} FAILED with message --${reject_get_new_AT.message}-- from: get_new_AT()]`,
                                     actualResponse: {is: false},
-                                    realResponse: reject_get_new_AT
+                                    realResponse: reject_get_new_AT.realResponse
                                 })
                             })
                     }
@@ -1185,11 +1397,68 @@ var addToPL = async function(req, res, next){
                 })//first call to API
         })
         .catch((reject_getAT) => {
+            console.log(`   in ${f_name}> catch reject_getAT`)
             res.json({
                 statusCode: 404,
                 message: `[${f_name} FAILED with message: --${reject_getAT}-- from: ${call1}]`,
                 actualResponse: {is: false},
                 realResponse: reject_getAT
+            })
+        })
+}
+//
+/** PUT /addHistory/id
+ *  @ gets user id from querystring
+ *  @ gets from body parameters: history{command}
+ *  @ gets from body optional parameters: history{desc/pl_1/pl_2/pl_new/uid_shares/art_id/art_name}
+ *  @ returns res.json():
+ *  @ success   :   {status, message, actualResponse, realResponse}
+ *  @ failure   :   {status, message, actualResponse, realResponse}
+ *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
+ */
+var addHistory = async function(req, res, next){
+    let f_name = '/PUT addHistory', call1 = 'findOneAndUpdate()', call2= 'call2'
+    console.log(`starting ${f_name}`)
+    const {id = null} = req.params
+    //
+    //getting user from DB
+    let r = {
+        command: 0
+    } 
+    if(req.body.hasOwnProperty('command') == false){
+        res.json({
+            statusCode: 404,
+            message: `[${f_name} FAILED with message: --no command sent in body-- from: ${f_name}]`,
+            actualResponse: {is: false},
+            realResponse: 'no real response'
+        })
+    }
+    r.command = req.body.command
+    if(req.body.hasOwnProperty('desc'       )) r.desc       = req.body.desc
+    if(req.body.hasOwnProperty('pl_1'       )) r.pl_1       = req.body.pl_1
+    if(req.body.hasOwnProperty('pl_2'       )) r.pl_2       = req.body.pl_2
+    if(req.body.hasOwnProperty('pl_new'     )) r.pl_new     = req.body.pl_new
+    if(req.body.hasOwnProperty('uid_shares' )) r.uid_shares = req.body.uid_shares
+    if(req.body.hasOwnProperty('art_id'     )) r.art_id     = req.body.art_id
+    if(req.body.hasOwnProperty('art_name'   )) r.art_name   = req.body.art_name
+    
+    User.findOneAndUpdate({id: id}, {$push: {history: r}}).exec()
+        .then((res) => {
+            res.json({
+                statusCode: 200,
+                message: `[${f_name} SUCCESS with message: --success-- from: ${f_name}]`,
+                actualResponse: {is: true, data: r},
+                realResponse: res
+            })
+        })
+        .catch((err) => {
+            let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
+            let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+            res.json({
+                statusCode: sc,
+                message: `[${f_name} FAILED with message: --${ms}-- from: ${call1}]`,
+                actualResponse: {is: false},
+                realResponse: err
             })
         })
 }
@@ -1205,5 +1474,8 @@ module.exports = {
     artistTopTracks: artistTopTracks,
     newPL: newPL,
     addToPL: addToPL,
-    invalidAT: invalidAT
+    invalidAT: invalidAT,
+    makePLbyArtist: makePLbyArtist,
+    getHistory: getHistory,
+    addHistory: addHistory
 }

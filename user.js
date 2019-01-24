@@ -2,8 +2,6 @@
 const mongoose  =   require ('mongoose')
 
 const schema_history = {
-    //relevant?
-    time_stamp: {type: String, required: true},
     //1 = merge, 2 = artist, 3 = shared
     command: {type: Number, required: true},
     desc: String,       //merged my playlists
@@ -14,8 +12,9 @@ const schema_history = {
     pl_new: String,     //new PL id
     uid_shares: String, //id of user who shared playlist
                         //if not shared then null
-    artist: String      //artist id
+    art_id: String,     //artist id
                         //if merge then null
+    art_name: String    //artist name
 }
 const History = new mongoose.Schema(schema_history)
 
