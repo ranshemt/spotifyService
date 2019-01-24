@@ -3,3 +3,6 @@ launch.json
 *.docx
 *.psd
 *.pdf
+/other
+/graphics
+tmp.JSON
