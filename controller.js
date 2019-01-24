@@ -9,7 +9,7 @@ const asyncWrapper  = require ('./async.wrapper')
 //
 //GLOBAL variables
 var baseURL = ''
-if(process.env.PORT != 300){
+if(process.env.PORT != 3000){
     baseURL       = 'https://spotify-service.herokuapp.com'
 } else{
     baseURL       = 'http://localhost:3000'
