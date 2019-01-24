@@ -8,7 +8,12 @@ const User          = require ('./user')
 const asyncWrapper  = require ('./async.wrapper')
 //
 //GLOBAL variables
-const baseURL       = 'http://localhost:3000'
+var baseURL = ''
+if(process.env.PORT != 300){
+    baseURL       = 'https://spotify-service.herokuapp.com'
+} else{
+    baseURL       = 'http://localhost:3000'
+}
 /** function
  *  @ gets user id
  *  @ query mongoose to find 'AT'
@@ -1087,7 +1092,8 @@ var makePLbyArtist = async function(req, res, next){
                                                 json: true
                                             }
                                             rp(options_addHistory)
-                                                .then((resolve_addHistory) => {
+                                                .then((resolve_addHistory) => {console.log(`   in ${f_name}> resolve_addHistory`)
+                                                    console.log(`   in ${f_name}> resolve_addHistory: ${JSON.stringify(resolve_addHistory)}`)
                                                     let r = {
                                                         id: newPL_id,
                                                         name: pl_name,
