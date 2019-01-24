@@ -220,6 +220,58 @@ async function s_api_me(myAT){
             })
     })//new Promise
 }
+/** function
+ *  @ gets user id & body object
+ *  @ returns new Promise:
+ *  @ resolve   :   {status, message, realResponse, actualResponse}
+ *  @ reject    :   {status, message, realResponse, actualResponse}
+ */
+async function add_history(uid, body){
+    return new Promise(async (resolve, reject) => {
+        var f_name = 'add_history()', call1 = 'findOneAndUpdate()', call2= 'call2'
+        console.log(`starting ${f_name}`)
+        //getting user from DB
+        let r = {
+            command: 0
+        } 
+        if(body.hasOwnProperty('command') == false){
+            reject({
+                statusCode: 404,
+                message: `[${f_name} FAILED with message: --no command sent in body-- from: ${f_name}]`,
+                actualResponse: {is: false},
+                realResponse: 'no real response'
+            })
+        }
+        r.command = body.command
+        if(body.hasOwnProperty('desc'       )) r.desc       = body.desc
+        if(body.hasOwnProperty('pl_1'       )) r.pl_1       = body.pl_1
+        if(body.hasOwnProperty('pl_2'       )) r.pl_2       = body.pl_2
+        if(body.hasOwnProperty('pl_new'     )) r.pl_new     = body.pl_new
+        if(body.hasOwnProperty('uid_shares' )) r.uid_shares = body.uid_shares
+        if(body.hasOwnProperty('art_id'     )) r.art_id     = body.art_id
+        if(body.hasOwnProperty('art_name'   )) r.art_name   = body.art_name
+        
+        User.findOneAndUpdate({id: uid}, {$push: {history: r}}).exec()
+            .then((res) => {
+                resolve({
+                    statusCode: 200,
+                    message: `[${f_name} SUCCESS with message: --success-- from: ${f_name}]`,
+                    actualResponse: {is: true, data: r},
+                    realResponse: res
+                })
+            })
+            .catch((err) => {
+                let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
+                let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+                reject({
+                    statusCode: sc,
+                    message: `[${f_name} FAILED with message: --${ms}-- from: ${call1}]`,
+                    actualResponse: {is: false},
+                    realResponse: err
+                })
+            })
+    })
+}
 //
 //
 //ROUTES implementations
@@ -1078,22 +1130,14 @@ var makePLbyArtist = async function(req, res, next){
                                         .then((resolve_addToPL) => {
                 //add to history
                                             let history_body = {
-                                                code: 3,
+                                                command: 3,
                                                 desc: `new playlist created: ${pl_name} with ${newPL_len} tracks based on: ${artist_name}`,
                                                 pl_1: newPL_id,
                                                 art_id: art_id,
                                                 art_name: artist_name
                                             }
-                                            let options_addHistory = {
-                                                method: 'PUT',
-                                                uri: baseURL + '/addHistory/' + id,
-                                                headers: {'content-type': 'application/json'},
-                                                body: { history_body },
-                                                json: true
-                                            }
-                                            rp(options_addHistory)
-                                                .then((resolve_addHistory) => {console.log(`   in ${f_name}> resolve_addHistory`)
-                                                    console.log(`   in ${f_name}> resolve_addHistory: ${JSON.stringify(resolve_addHistory)}`)
+                                            add_history(id, history_body)
+                                                .then((resolve_addHistory) => {
                                                     let r = {
                                                         id: newPL_id,
                                                         name: pl_name,
@@ -1423,48 +1467,26 @@ var addToPL = async function(req, res, next){
  *  @ actualRespone {is: false} OR {is: true, data: what_you_want}
  */
 var addHistory = async function(req, res, next){
-    let f_name = '/PUT addHistory', call1 = 'findOneAndUpdate()', call2= 'call2'
+    let f_name = '/PUT addHistory', call1 = 'add_history()', call2= 'call2'
     console.log(`starting ${f_name}`)
     const {id = null} = req.params
     //
-    //getting user from DB
-    let r = {
-        command: 0
-    } 
-    if(req.body.hasOwnProperty('command') == false){
-        res.json({
-            statusCode: 404,
-            message: `[${f_name} FAILED with message: --no command sent in body-- from: ${f_name}]`,
-            actualResponse: {is: false},
-            realResponse: 'no real response'
-        })
-    }
-    r.command = req.body.command
-    if(req.body.hasOwnProperty('desc'       )) r.desc       = req.body.desc
-    if(req.body.hasOwnProperty('pl_1'       )) r.pl_1       = req.body.pl_1
-    if(req.body.hasOwnProperty('pl_2'       )) r.pl_2       = req.body.pl_2
-    if(req.body.hasOwnProperty('pl_new'     )) r.pl_new     = req.body.pl_new
-    if(req.body.hasOwnProperty('uid_shares' )) r.uid_shares = req.body.uid_shares
-    if(req.body.hasOwnProperty('art_id'     )) r.art_id     = req.body.art_id
-    if(req.body.hasOwnProperty('art_name'   )) r.art_name   = req.body.art_name
-    
-    User.findOneAndUpdate({id: id}, {$push: {history: r}}).exec()
-        .then((res) => {
+    //get actualResponse for add_history
+    add_history(id, req.body)
+        .then((resolve_add_history) => {
             res.json({
-                statusCode: 200,
-                message: `[${f_name} SUCCESS with message: --success-- from: ${f_name}]`,
-                actualResponse: {is: true, data: r},
-                realResponse: res
+                statusCode: resolve_add_history.statusCode,
+                message: `[${f_name} SUCCESS with message --${resolve_add_history.message}-- from: ${call1}]`,
+                actualResponse: resolve_add_history.actualResponse,
+                realResponse: resolve_add_history
             })
         })
-        .catch((err) => {
-            let sc = err.hasOwnProperty('statusCode') ? err.statusCode : 999
-            let ms = err.hasOwnProperty('message'   ) ? err.message    : 'err: no message property'
+        .catch((reject_add_history) => {
             res.json({
-                statusCode: sc,
-                message: `[${f_name} FAILED with message: --${ms}-- from: ${call1}]`,
-                actualResponse: {is: false},
-                realResponse: err
+                statusCode: reject_add_history.statusCode,
+                message: `[${f_name} FAILED with message --${reject_add_history.message}-- from: ${call1}]`,
+                actualResponse: reject_add_history.actualResponse,
+                realResponse: reject_add_history
             })
         })
 }
