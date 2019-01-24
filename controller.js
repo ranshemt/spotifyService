@@ -1190,11 +1190,13 @@ var makePLbyArtist = async function(req, res, next){
                         })
                 })
                 .catch((reject_topTracks) => {
+                    let cs = reject_topTracks.hasOwnProperty('statusCode') ? reject_getArtist.statusCode : 999
+                    let ms = reject_topTracks.hasOwnProperty('message'   ) ? reject_getArtist.message    : 'no message'
                     res.json({
-                        statusCode: reject_topTracks.statusCode,
-                        message: `[${f_name} FAILED with message --${reject_topTracks.message}-- from: ${call2}]`,
+                        statusCode: cs,
+                        message: `[${f_name} FAILED with message --${ms}-- from: ${call2}]`,
                         actualResponse: {is: false},
-                        realResponse: reject_topTracks.realResponse
+                        realResponse: reject_topTracks
                     })
                 })
         })
